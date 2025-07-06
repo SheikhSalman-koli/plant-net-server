@@ -1,5 +1,6 @@
 require('dotenv').config()
 const express = require('express')
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb')
@@ -48,10 +49,11 @@ async function run() {
 
   const db = client.db('plantsDB')
   const plantCollection = db.collection('plants')
+  const orderCollection = db.collection('orders')
 
   try {
     // Generate jwt token
-    app.post('/jwt', async(req, res) => {
+    app.post('/jwt', async (req, res) => {
       const { email } = req.body
       const user = { email }
       if (!email) {
@@ -59,7 +61,7 @@ async function run() {
       }
       const token = jwt.sign(user, process.env.SECRET_KEY, { expiresIn: '2h' })
 
-      res.cookie('token', token,{
+      res.cookie('token', token, {
         httpOnly: true,
         secure: false
       })
@@ -91,25 +93,51 @@ async function run() {
 
 
     // add plants
-    app.post('/plants', async(req, res)=> {
-       const newPlant = req.body
-       const result = await plantCollection.insertOne(newPlant)
-       res.send(result)
+    app.post('/plants', async (req, res) => {
+      const newPlant = req.body
+      const result = await plantCollection.insertOne(newPlant)
+      res.send(result)
     })
 
     // get plants
-    app.get('/plants',async (req, res)=> {
+    app.get('/plants', async (req, res) => {
       // const allplanst = req.body
       const result = await plantCollection.find().toArray()
       res.send(result)
     })
 
-     // get a single plant
-    app.get('/plant/:id',async (req, res)=> {
+    // get a single plant
+    app.get('/plant/:id', async (req, res) => {
       const id = req.params.id
-      const query = {_id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const result = await plantCollection.findOne(query)
       res.send(result)
+    })
+
+    // create intent
+    app.post('/create-intent', async (req, res) => {
+      const { quantity, id } = req.body
+      const plant = await plantCollection.findOne(
+        { _id: new ObjectId(id) }
+      )
+      if (!plant) return res.status(404).send({ message: 'no plant found' })
+      const totalPrice = quantity * plant.price * 100
+      // srtipe
+      const {client_secret} = await stripe.paymentIntents.create({
+        amount: totalPrice, // amount in cents
+        currency: 'usd',
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+      res.send({clientSecret: client_secret})
+    })
+
+    // // orders
+    app.post('/orders', async(req,res)=>{
+       const orderData = req.body
+       const result = await orderCollection.insertOne(orderData)
+       res.send(result)
     })
 
 

@@ -118,11 +118,27 @@ async function run() {
       // console.log(req.user);
       const filter = {
           email: {
+            // n for not, e for equal
             $ne: req?.user?.email
           }
       }
       const result = await userCollection.find(filter).toArray()
       res.send(result)
+    })
+
+    // update user role
+    app.patch('/update/user/role/:email', async(req, res)=>{
+       const email = req.params.email
+       const {role} = req.body
+       const filter = {email: email}
+       const updatedDoc = {
+          $set: {
+            role,
+            status: 'varified'
+          }
+       }
+       const result = await userCollection.updateOne(filter, updatedDoc)
+       res.send(result)
     })
 
     // add plants

@@ -19,7 +19,7 @@ app.use(cors(corsOptions))
 app.use(express.json())
 app.use(cookieParser())
 
-  const verifyToken = async (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token
 
   if (!token) {
@@ -54,7 +54,7 @@ async function run() {
 
   try {
     // Generate jwt token
-     app.post('/jwt', async (req, res) => {
+    app.post('/jwt', async (req, res) => {
       const email = req.body
       const token = jwt.sign(email, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: '365d',
@@ -114,31 +114,90 @@ async function run() {
     })
 
     // get all users
-    app.get('/allUsers',verifyToken, async (req, res) => {
+    app.get('/allUsers', verifyToken, async (req, res) => {
       // console.log(req.user);
       const filter = {
-          email: {
-            // n for not, e for equal
-            $ne: req?.user?.email
-          }
+        email: {
+          // n for not, e for equal
+          $ne: req?.user?.email
+        }
       }
       const result = await userCollection.find(filter).toArray()
       res.send(result)
     })
 
     // update user role
-    app.patch('/update/user/role/:email', async(req, res)=>{
-       const email = req.params.email
-       const {role} = req.body
-       const filter = {email: email}
-       const updatedDoc = {
-          $set: {
-            role,
-            status: 'varified'
+    app.patch('/update/user/role/:email', async (req, res) => {
+      const email = req.params.email
+      const { role } = req.body
+      const filter = { email: email }
+      const updatedDoc = {
+        $set: {
+          role,
+          status: 'varified'
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+
+    // request for seller
+    app.patch('/become/seller/:email', async (req, res) => {
+      const email = req.params.email
+      const filter = { email: email }
+      const updatedDoc = {
+        $set: {
+          status: 'requested'
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+
+
+    // admin-state
+    app.get('/admin/statistic', async (req, res) => {
+
+      const totalOrder = await orderCollection.estimatedDocumentCount()
+      const totalPlant = await plantCollection.estimatedDocumentCount()
+      const totalUser = await userCollection.estimatedDocumentCount()
+
+      //  aggregation
+      const result = await orderCollection.aggregate([
+        {
+          $addFields: {
+            created_at: { $toDate: ('$_id') }
           }
-       }
-       const result = await userCollection.updateOne(filter, updatedDoc)
-       res.send(result)
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$created_at'
+              }
+            },
+            revenue: { $sum: '$plantPrice' },
+            orders: { $sum: 1 }
+          }
+        }
+      ]).toArray()
+      // change field name
+      const chartData = result.map(data => ({
+         Date: data._id,
+       revenue: data.revenue,
+        orders: data.orders
+      }))
+
+      const totalRevenue = result.reduce((sum, data) => sum + data?.revenue , 0 )
+      // {totalOrder, totalPlant, totalUser}
+      res.send({
+        chartData, 
+        totalOrder, 
+        totalPlant, 
+        totalUser,
+        totalRevenue
+      })
     })
 
     // add plants

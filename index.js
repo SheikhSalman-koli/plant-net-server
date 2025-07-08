@@ -53,6 +53,30 @@ async function run() {
   const userCollection = db.collection('users')
 
   try {
+
+
+    const verifyAdmin = async (req, res, next) => {
+      //  "req.user.email"  from verifyToken 
+        const email = req?.user?.email
+        const user = await userCollection.findOne({email})
+
+        if(!user || user?.role !== 'admin'){
+          return res.status(403).send({message:'anAuthorized access!' })
+        }
+      next()
+    }
+    const verifySeller = async (req, res, next) => {
+      //  "req.user.email"  from verifyToken 
+        const email = req?.user?.email
+        const user = await userCollection.findOne({email})
+
+        if(!user || user?.role !== 'seller'){
+          return res.status(403).send({message:'anAuthorized access!' })
+        }
+      next()
+    }
+
+
     // Generate jwt token
     app.post('/jwt', async (req, res) => {
       const email = req.body
@@ -114,7 +138,7 @@ async function run() {
     })
 
     // get all users
-    app.get('/allUsers', verifyToken, async (req, res) => {
+    app.get('/allUsers', verifyToken,verifyAdmin, async (req, res) => {
       // console.log(req.user);
       const filter = {
         email: {
@@ -127,7 +151,7 @@ async function run() {
     })
 
     // update user role
-    app.patch('/update/user/role/:email', async (req, res) => {
+    app.patch('/update/user/role/:email',verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email
       const { role } = req.body
       const filter = { email: email }
@@ -156,7 +180,7 @@ async function run() {
 
 
     // admin-state
-    app.get('/admin/statistic', async (req, res) => {
+    app.get('/admin/statistic',verifyToken, async (req, res) => {
 
       const totalOrder = await orderCollection.estimatedDocumentCount()
       const totalPlant = await plantCollection.estimatedDocumentCount()
@@ -201,7 +225,7 @@ async function run() {
     })
 
     // add plants
-    app.post('/plants', async (req, res) => {
+    app.post('/plants',verifyToken, verifySeller, async (req, res) => {
       const newPlant = req.body
       const result = await plantCollection.insertOne(newPlant)
       res.send(result)
@@ -219,6 +243,23 @@ async function run() {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await plantCollection.findOne(query)
+      res.send(result)
+    })
+
+    // get all order for customer
+    app.get('/all/orders/customer/:email',verifyToken, async(req, res) => {
+      const email = req.params.email
+      const filter = {"customer.email" :email}
+      const result = await orderCollection.find(filter).toArray()
+      res.send(result)
+    })
+
+
+    // get all order for seller
+    app.get('/all/orders/seller/:email',verifyToken, verifySeller, async(req, res) => {
+      const email = req.params.email
+      const filter = {"seller.email" :email}
+      const result = await orderCollection.find(filter).toArray()
       res.send(result)
     })
 
